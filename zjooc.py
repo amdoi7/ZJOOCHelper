@@ -27,7 +27,14 @@ Headers = {
 
 
 class ZJOOC:
-
+    Headers = {
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'SignCheck': '311b2837001279449a9ac84d026e11c5',
+        'TimeDate': '1646754554000',
+        # 这里的TimeDate 和 SignCheck 是时间戳和加密后的token
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                      'Chrome/111.0.0.0 Safari/537.36',
+    }
     def __init__(self, username='', password=''):
         # self.username = username
         # self.password = password
@@ -36,6 +43,20 @@ class ZJOOC:
         self._cookies = ''
         self._batch_dict = dict()
         self._login(username, password)
+
+    @staticmethod
+    def get_captcha() -> dict:  # 获取验证码信息
+        captcha_headers = {
+            'User-Agent': 'Mozilla/5.0(WindowsNT10.0;Win64;x64)AppleWebKit/537.36(KHTML,likeGecko)Chrome/98.0.4758.102Safari/537.36',
+        }
+        captcha = requests.get('https://centro.zjlll.net/ajax?&service=/centro/api/authcode/create&params=',
+                               headers=captcha_headers).json()['data']
+        #    img_bytes = base64.b64de(b64_img)
+        #   with open("test.jpg", 'wb') as f:
+        #         f.write(img_bytes)
+
+        return captcha
+
 
     def _login(self, username='', password=''):
         login_res = '验证码输入有误'
@@ -245,7 +266,8 @@ class ZJOOC:
         秒过章节内容。
         '''
         # 手动填入要做的video 的 courseid
-
+        if not courseid : return
+        
         for i in self.get_videomsg(courseId=courseid):
             print(i['courseId'], i['time'])
             if i['time']:
@@ -273,6 +295,8 @@ class ZJOOC:
                              headers=Headers).json()
 
     def get_an(self, paperId, courseId) -> dict:
+        if not all(paperId, courseId): return {}
+
         answesdata = {
             'service': '/tkksxt/api/student/score/scoreDetail',
             'body': 'true',
@@ -290,18 +314,20 @@ class ZJOOC:
         # 返回题目ID及其对应的答案,后面直接上传
         return {andata['id']: andata['rightAnswer'] for andata in answer_data}
 
-    def do_an(self, paperId, courseId, classId):
+    def do_an(self, paperid, courseid, classid):
         """
         """
+        if not all(paperid, courseid, classid): return 
+
         # 获取题目答案
-        paper_an_data = self.get_an(paperId, courseId)
+        paper_an_data = self.get_an(paperid, classid)
         # 申请答题
         answesparams = {
             'service': '/tkksxt/api/admin/paper/getPaperInfo',
-            'params[paperId]': paperId,
-            'params[courseId]': courseId,
-            'params[classId]': classId,
-            'params[batchKey]': self._batch_dict[courseId],
+            'params[paperId]': paperid,
+            'params[courseId]': courseid,
+            'params[classId]': classid,
+            'params[batchKey]': self._batch_dict[courseid],
         }
         paper_data = requests.get('https://www.zjooc.cn/ajax',
                                   params=answesparams,
@@ -341,6 +367,6 @@ class ZJOOC:
         for msg in [self.exammsg, self.hwmsg, self.quizemsg]:
             for m in msg:
                 if m['scorePropor'] != '100/100.0':
-                    self.do_an(paperId=m['paperId'],
-                               courseId=m['courseId'],
-                               classId=m['classId'])
+                    self.do_an(paperid=m['paperId'],
+                               courseid=m['courseId'],
+                               classid=m['classId'])

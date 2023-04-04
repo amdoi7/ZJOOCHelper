@@ -24,7 +24,7 @@ if __name__ == '__main__':
     user.do_ans()
     # 此命令会自动获取 测验 考试 作业的信息 并且自动完成
     # 如果有主观题 谨慎使用 -> do_an
-    user.do_an(paperId = '', courseId = '', classId = '')
+    user.do_an(paperid = '', courseid = '', classid = '')
     # 手动获取 测验 考试 作业的信息 客观题试卷可以直接用此方法完成
 ```
 
