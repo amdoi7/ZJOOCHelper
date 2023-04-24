@@ -3,26 +3,13 @@ import ddddocr
 import re
 
 
-def get_captcha() -> dict:  # 获取验证码信息
-    captcha_headers = {
-        'User-Agent': 'Mozilla/5.0(WindowsNT10.0;Win64;x64)AppleWebKit/537.36(KHTML,likeGecko)Chrome/98.0.4758.102Safari/537.36',
-    }
-    captcha = requests.get('https://centro.zjlll.net/ajax?&service=/centro/api/authcode/create&params=',
-                           headers=captcha_headers).json()['data']
-    #    img_bytes = base64.b64de(b64_img)
-    #   with open("test.jpg", 'wb') as f:
-    #         f.write(img_bytes)
-
-    return captcha
-
-
 Headers = {
     'Accept': 'application/json, text/javascript, */*; q=0.01',
     'SignCheck': '311b2837001279449a9ac84d026e11c5',
     'TimeDate': '1646754554000',
     # 这里的TimeDate 和 SignCheck 是时间戳和加密后的token
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                  'Chrome/111.0.0.0 Safari/537.36',
+    'Chrome/111.0.0.0 Safari/537.36',
 }
 
 
@@ -33,16 +20,17 @@ class ZJOOC:
         'TimeDate': '1646754554000',
         # 这里的TimeDate 和 SignCheck 是时间戳和加密后的token
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/111.0.0.0 Safari/537.36',
+        'Chrome/111.0.0.0 Safari/537.36',
     }
-    def __init__(self, username='', password=''):
-        # self.username = username
-        # self.password = password
-        # user = requests.session() session 实例化后可以不用一直填写 Header 和 cookies 太懒了不想改了
 
-        self._cookies = ''
+    def __init__(self, username='', pwd=''):
+        # self.username = username
+        # self.pwd = pwd
+        # user = requests.session() session 实例化后可以不用一直填写 Header 和 cookies 太懒了不想改了
+        self.session = requests.Session()
+
         self._batch_dict = dict()
-        self._login(username, password)
+        self._login(username, pwd)
 
     @staticmethod
     def get_captcha() -> dict:  # 获取验证码信息
@@ -50,18 +38,18 @@ class ZJOOC:
             'User-Agent': 'Mozilla/5.0(WindowsNT10.0;Win64;x64)AppleWebKit/537.36(KHTML,likeGecko)Chrome/98.0.4758.102Safari/537.36',
         }
         captcha = requests.get('https://centro.zjlll.net/ajax?&service=/centro/api/authcode/create&params=',
-                               headers=captcha_headers).json()['data']
+                                headers=captcha_headers
+                                ).json()['data']
         #    img_bytes = base64.b64de(b64_img)
         #   with open("test.jpg", 'wb') as f:
         #         f.write(img_bytes)
 
         return captcha
 
-
-    def _login(self, username='', password=''):
+    def _login(self, username='', pwd=''):
         login_res = '验证码输入有误'
         while '验证码输入有误' in login_res:
-            captcha_data = get_captcha()
+            captcha_data = self.get_captcha()
             captcha_id = captcha_data['id']  # 验证码ID
             ocr = ddddocr.DdddOcr()
             captcha_code = ocr.classification(captcha_data['image'])
@@ -69,7 +57,7 @@ class ZJOOC:
 
             login_data = {
                 'login_name': username,
-                'password': password,
+                'password': pwd,
                 'captchaCode': captcha_code,
                 'captchaId': captcha_id,
                 'redirect_url': 'https://www.zjooc.cn',
@@ -77,19 +65,23 @@ class ZJOOC:
                 'utoLoginTime': '7'
             }
             # FIXME 这里并没有做异常处理 一般情况下你账号密码正确 没有什么问题 可能验证码错误重试即可。
-            login_res = requests.post('https://centro.zjlll.net/login/doLogin',
-                                      data=login_data).json()
-        print(login_res)
+            login_res = self.session.post('https://centro.zjlll.net/login/doLogin',
+                                        data=login_data
+                                        ).json()
+
+            print(login_res)
+            if login_res["resultCode"] != 0:
+                return
         login_param = {
             # 'time': 'm6kxkKnDKxj7kP6yziFQiB8JcAXrsBC41646796129000',
             # time 可以不传 是一个时间戳加密后的数据
             'auth_code': login_res['authorization_code'],
             'autoLoginTime': '7'
         }
-        login_res = requests.get('https://www.zjooc.cn/autoLogin',
-                                 params=login_param)
-        # dict_from_cookiejar 把cookies 对象 转换为python dict
-        self._cookies = requests.utils.dict_from_cookiejar(login_res.cookies)
+        login_res = self.session.get('https://www.zjooc.cn/autoLogin',
+                                    params=login_param)
+        # # dict_from_cookiejar 把cookies 对象 转换为python dict
+        # self._cookies = requests.utils.dict_from_cookiejar(login_res.cookies)
 
     @property
     def infomsg(self) -> dict:
@@ -97,14 +89,13 @@ class ZJOOC:
             'service': '/centro/api/user/getProfile',
             'params[withDetail]': True
         }
-        info_data = \
-            requests.get('https://www.zjooc.cn/ajax',
-                         params=params,
-                         headers=Headers,
-                         cookies=self._cookies).json()['data']
+        info_data = self.session.get('https://www.zjooc.cn/ajax',
+                                    params=params,
+                                    headers=Headers
+                                    ).json()
 
         print(info_data)
-
+        info_data = info_data["data"]
         course_msg = {
             'name': info_data['name'],
             'corpName': info_data['corpName'],
@@ -126,23 +117,22 @@ class ZJOOC:
 
         }
         course_msg_data = requests.get('https://www.zjooc.cn/ajax',
-                                       params=params,
-                                       headers=Headers,
-                                       cookies=self._cookies).json()['data']
-        couselst = [{
+                                    params=params,
+                                    headers=Headers,
+                                    ).json()['data']
+        course_lst = [{
             'id': i,
             'courseId': course_msg_data[i]['id'],
             'courseName': course_msg_data[i]['name'],
             'courseBatchId': course_msg_data[i]['batchId'],
             'courseProcessStatus': course_msg_data[i]['processStatus'],
-            } for i in range(len(course_msg_data))]
-        
+        } for i in range(len(course_msg_data))]
 
-            # 获取课程id对应的batchid
+        # 获取课程id对应的batchid
         self._batch_dict = {course_msg_data[i]['id']: course_msg_data[i]['batchId']
                             for i in range(len(course_msg_data))}
 
-        return couselst
+        return course_lst
 
     def _get_msg(self, mode) -> list:
         """
@@ -161,25 +151,25 @@ class ZJOOC:
                 'batchKey': ''
             }
         }
-        msg_data = requests.get('https://www.zjooc.cn/ajax',
-                                params=params,
-                                cookies=self._cookies,
-                                headers=Headers).json()['data']
+        res_msg_data = self.session.get('https://www.zjooc.cn/ajax',
+                                    params=params,
+                                    headers=Headers
+                                    ).json()['data']
 
-        msglst = []
-        for i in range(len(msg_data)):
+        msg_lst = []
+        for i in range(len(res_msg_data)):
             msg_dict = {
                 'id': i,
-                'courseName': msg_data[i]['courseName'],
-                'paperName': msg_data[i]['paperName'],
-                'classId': msg_data[i]['classId'],
-                'courseId': msg_data[i]['courseId'],
-                'paperId': msg_data[i]['paperId'],
-                'scorePropor': msg_data[i]['scorePropor']
+                'courseName': res_msg_data[i]['courseName'],
+                'paperName': res_msg_data[i]['paperName'],
+                'classId': res_msg_data[i]['classId'],
+                'courseId': res_msg_data[i]['courseId'],
+                'paperId': res_msg_data[i]['paperId'],
+                'scorePropor': res_msg_data[i]['scorePropor']
             }
-            msglst.append(msg_dict)
+            msg_lst.append(msg_dict)
 
-        return msglst
+        return msg_lst
 
     @property
     def quizemsg(self) -> list:
@@ -195,7 +185,7 @@ class ZJOOC:
 
     @property
     def scoremsg(self) -> list:
-        scorelst = []
+        score_lst = []
         params = {
             'service': '/report/api/course/courseStudentScore/scoreList',
             'params': {
@@ -206,11 +196,11 @@ class ZJOOC:
             },
             'checkTimeout': 'true'
         }
-        score_data = requests.get('https://www.zjooc.cn/ajax',
-                                  params=params,
-                                  headers=Headers,
-                                  cookies=self._cookies).json()['data']
-        for i in score_data:
+        res_score_data = requests.get('https://www.zjooc.cn/ajax',
+                                    params=params,
+                                    headers=Headers,
+                                    ).json()['data']
+        for i in res_score_data:
             score_dict = {
                 'courseId': i['courseId'],
                 'courseName': i['courseName'],
@@ -221,22 +211,22 @@ class ZJOOC:
                 'testScore': i['testScore'],
                 'homeworkScore': i['homeworkScore'],
             }
-            scorelst.append(score_dict)
+            score_lst.append(score_dict)
 
-        return scorelst
+        return score_lst
 
-    def get_videomsg(self, courseId) -> list:
-        videomsg = list()
+    def get_video_msg(self, course_id) -> list:
+        video_msg = list()
         params = {
             'service': '/jxxt/api/course/courseStudent/getStudentCourseChapters',
             'params[pageNo]': 1,
-            'params[courseId]': courseId,
+            'params[courseId]': course_id,
             'params[urlNeed]': '0'
         }
-        video_data = requests.get('https://www.zjooc.cn/ajax',
-                                  params=params,
-                                  headers=Headers,
-                                  cookies=self._cookies).json()['data']
+        video_data = self.session.get('https://www.zjooc.cn/ajax',
+                                    params=params,
+                                    headers=Headers,
+                                    ).json()['data']
 
         idx = 0
         for child0 in video_data:
@@ -250,27 +240,30 @@ class ZJOOC:
                         video_dict = {
                             'id': idx,
                             'Name': child0['name'] + '-' + child1['name'] + '-' + child2['name'],
-                            'courseId': courseId,
+                            'courseId': course_id,
                             'chapterId': child2['id'],
                             'time': child2.get('vedioTimeLength', 0),
 
                             # 'learnStatus':videoMsgData2[n]['learnStatus']
                         }
 
-                        videomsg.append(video_dict)
+                        video_msg.append(video_dict)
                 idx += 1
-        return videomsg
+        return video_msg
 
-    def do_video(self, courseid):
+    def do_video(self, course_id):
         '''
         秒过章节内容。
         '''
         # 手动填入要做的video 的 courseid
-        if not courseid : return
-        
-        for i in self.get_videomsg(courseId=courseid):
-            print(i['courseId'], i['time'])
+        if not course_id:
+            return
+        video_lst = self.get_video_msg(course_id=course_id)
+        video_cnt = len(video_lst)
+        idx = 0
+        for i in video_lst:
             if i['time']:
+                idx += 1
                 params = {
                     'service': '/learningmonitor/api/learning/monitor/videoPlaying',
                     'params[chapterId]': i['chapterId'],
@@ -279,65 +272,73 @@ class ZJOOC:
                     'params[percent]': '100',
                 }
 
-                requests.get('https://www.zjooc.cn/ajax',
-                             params=params,
-                             cookies=self._cookies,
-                             headers=Headers).json()
+                self.session.get('https://www.zjooc.cn/ajax',
+                                params=params,
+                                headers=Headers
+                                ).json()
             else:
                 params = {
                     'service': '/learningmonitor/api/learning/monitor/finishTextChapter',
                     'params[courseId]=': i['courseId'],
                     'params[chapterId]=': i['chapterId']
                 }
-                requests.get('https://www.zjooc.cn/ajax?',
-                             params=params,
-                             cookies=self._cookies,
-                             headers=Headers).json()
+                self.session.get('https://www.zjooc.cn/ajax?',
+                                params=params,
+                                headers=Headers
+                                ).json()
+            print(
+                "\r",
+                "😎" * idx + "--" * (video_cnt - idx),
+                f"[{idx / video_cnt:.0%}]",
+                end="",
+            )
 
-    def get_an(self, paperId, courseId) -> dict:
-        if not all(paperId, courseId): return {}
+    def get_an(self, paperId, course_id) -> dict:
+        if not all(paperId, course_id):
+            return {}
 
-        answesdata = {
+        answer_data = {
             'service': '/tkksxt/api/student/score/scoreDetail',
             'body': 'true',
-            'params[batchKey]': self._batch_dict[courseId],
+            'params[batchKey]': self._batch_dict[course_id],
             'params[paperId]': paperId,
-            'params[courseId]': courseId
+            'params[courseId]': course_id
         }
-        answer_data = requests.post('https://www.zjooc.cn/ajax',
-                                    data=answesdata,
-                                    headers=Headers,
-                                    cookies=self._cookies).json()['data']['paperSubjectList']
-        print({re.sub(r'<[^>]*?>', '', andata.decode("unicode_escape")['subjectName']).replace('\n', ''): andata[
+        res_answer_data = self.session.post('https://www.zjooc.cn/ajax',
+                                        data=answer_data,
+                                        headers=Headers,
+                                        ).json()['data']['paperSubjectList']
+        print({re.sub(r'<[^>]*?>', '', an_data.decode("unicode_escape")['subjectName']).replace('\n', ''): an_data[
             'rightAnswer'] for
-               andata in answer_data})
+            an_data in res_answer_data})
         # 返回题目ID及其对应的答案,后面直接上传
-        return {andata['id']: andata['rightAnswer'] for andata in answer_data}
+        return {an_data['id']: an_data['rightAnswer'] for an_data in res_answer_data}
 
-    def do_an(self, paperid, courseid, classid):
+    def do_an(self, paper_id, course_id, class_id):
         """
         """
-        if not all(paperid, courseid, classid): return 
+        if not all(paper_id, course_id, class_id):
+            return
 
         # 获取题目答案
-        paper_an_data = self.get_an(paperid, classid)
+        paper_an_data = self.get_an(paper_id, class_id)
         # 申请答题
         answesparams = {
             'service': '/tkksxt/api/admin/paper/getPaperInfo',
-            'params[paperId]': paperid,
-            'params[courseId]': courseid,
-            'params[classId]': classid,
-            'params[batchKey]': self._batch_dict[courseid],
+            'params[paperId]': paper_id,
+            'params[courseId]': course_id,
+            'params[classId]': class_id,
+            'params[batchKey]': self._batch_dict[course_id],
         }
-        paper_data = requests.get('https://www.zjooc.cn/ajax',
-                                  params=answesparams,
-                                  cookies=self._cookies,
-                                  headers=Headers).json()['data']
+        paper_data = self.session.get('https://www.zjooc.cn/ajax',
+                                params=answesparams,
+                                headers=Headers
+                                ).json()['data']
 
         send_data = {
             'service': '/tkksxt/api/student/score/sendSubmitAnswer',
             'body': 'true',
-            'params[batchKey]': self._batch_dict[courseId],
+            'params[batchKey]': self._batch_dict[course_id],
             'params[id]': paper_data['id'],
             'params[stuId]': paper_data['stuId'],
             'params[clazzId]': paper_data['paperSubjectList'],
@@ -352,9 +353,8 @@ class ZJOOC:
             }
             send_data.update(qa_dict)
         print(send_data)
-        res = requests.post('https://www.zjooc.cn/ajax',
+        res = self.session.post('https://www.zjooc.cn/ajax',
                             data=send_data,
-                            cookies=self._cookies,
                             headers=Headers).content.decode('utf-8')
 
     def do_ans(self):
@@ -364,9 +364,19 @@ class ZJOOC:
         如果包含简答题 谨慎使用！！！
         如果包含简答题 谨慎使用！！！
         """
+        idx = 0
+        paper_cnt = sum([len(i)
+                        for i in [self.exammsg, self.hwmsg, self.quizemsg]])
         for msg in [self.exammsg, self.hwmsg, self.quizemsg]:
             for m in msg:
                 if m['scorePropor'] != '100/100.0':
                     self.do_an(paperid=m['paperId'],
-                               courseid=m['courseId'],
-                               classid=m['classId'])
+                                courseid=m['courseId'],
+                                classid=m['classId'])
+                    idx += 1
+                    print(
+                        "\r",
+                        "😎" * idx + "--" * (paper_cnt - idx),
+                        f"[{idx/ paper_cnt:.0%}]",
+                        end="",
+                    )
