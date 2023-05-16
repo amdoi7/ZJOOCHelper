@@ -3,3 +3,5 @@ __pycache__/zjooc.cpython-311.pyc
 demo,py
 /demo.py
 __pycache__
+.idea
+.vscode
