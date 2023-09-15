@@ -15,7 +15,7 @@ if __name__ == '__main__':
     user = ZJOOC(username='', 
                 pwd='')
 
-    print(user.infomsg, user.coursemsg)
+    # user.coursemsg # 获取 batchKey 
     # {'resultCode': 0, 'message': '操作成功'...
     print(user._get_msg(0))
     # param mode: 0-测验 1-考试 2-作业
