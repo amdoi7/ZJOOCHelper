@@ -62,6 +62,7 @@ class ZJOOC:
                 ).json()
             except Exception as ex:
                 pprint(ex)
+                print("Login failed.")
                 break
 
             if login_res.get("resultCode", 1) == 0:
@@ -76,6 +77,7 @@ class ZJOOC:
             "autoLoginTime": "7",
         }
         self.session.get("https://www.zjooc.cn/autoLogin", params=login_param)
+        print("Login success.")
         # # dict_from_cookiejar 把cookies 对象 转换为python dict
         # self._cookies = requests.utils.dict_from_cookiejar(login_res.cookies)
 
@@ -295,6 +297,7 @@ class ZJOOC:
     def get_an(self, paperId, course_id) -> dict:
         if not all([paperId, course_id]):
             return {}
+        res_answer_data: list = []
         try:
             answer_data = {
                 "service": "/tkksxt/api/student/score/scoreDetail",
@@ -312,7 +315,8 @@ class ZJOOC:
             ).json()["data"]["paperSubjectList"]
             pprint(res_answer_data)
         except Exception as ex:
-            return {"err": str(ex)}
+            print("err:", ex)
+
         return {an_data["id"]: an_data["rightAnswer"] for an_data in res_answer_data}
 
     def do_an(self, paper_id, course_id, class_id):
@@ -334,7 +338,7 @@ class ZJOOC:
             return
 
         # 获取题目答案
-        paper_an_data = self.get_an(paper_id, class_id)
+        paper_an_data = self.get_an(paper_id, course_id)
         # 申请答题
         answesparams = {
             "params[paperId]": paper_id,
@@ -357,7 +361,6 @@ class ZJOOC:
             "params[clazzId]": paper_data["paperSubjectList"],
             "params[scoreId]": paper_data["scoreId"],
         }
-
         for i in range(len(paper_data["paperSubjectList"])):
             qa_dict = {
                 f"params[paperSubjectList][{i}][id]": paper_data["paperSubjectList"][i][
