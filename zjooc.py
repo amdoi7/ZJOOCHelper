@@ -1,6 +1,8 @@
-import requests
-import ddddocr
 import base64
+from pprint import pprint
+
+import ddddocr
+import requests
 
 Headers = {
     "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -12,37 +14,37 @@ Headers = {
 }
 
 
+def get_captcha() -> dict:  # 获取验证码信息
+    captcha_headers = {
+        "User-Agent": "Mozilla/5.0(WindowsNT10.0;Win64;x64)AppleWebKit/537.36(KHTML,likeGecko)Chrome/98.0.4758.102Safari/537.36",
+    }
+    captcha = requests.get(
+        "https://centro.zjlll.net/ajax?&service=/centro/api/authcode/create&params=",
+        headers=captcha_headers,
+    ).json()["data"]
+    #    img_bytes = base64.b64de(b64_img)
+    #   with open("test.jpg", 'wb') as f:
+    #         f.write(img_bytes)
+    return captcha
+
+
 class ZJOOC:
     def __init__(self, username="", pwd=""):
         # user = requests.session() session 实例化后可以不用一直填写 Header 和 cookies 太懒了不想改了
         self.session = requests.Session()
         self.session.verify = False
         self._batch_dict = dict()
-        self._login(username, pwd)
+        self.login(username, pwd)
+        self.coursemsg
 
-    @staticmethod
-    def get_captcha() -> dict:  # 获取验证码信息
-        captcha_headers = {
-            "User-Agent": "Mozilla/5.0(WindowsNT10.0;Win64;x64)AppleWebKit/537.36(KHTML,likeGecko)Chrome/98.0.4758.102Safari/537.36",
-        }
-        captcha = requests.get(
-            "https://centro.zjlll.net/ajax?&service=/centro/api/authcode/create&params=",
-            headers=captcha_headers,
-        ).json()["data"]
-        #    img_bytes = base64.b64de(b64_img)
-        #   with open("test.jpg", 'wb') as f:
-        #         f.write(img_bytes)
-
-        return captcha
-
-    def _login(self, username="", pwd="") -> None:
-        login_res: dict
+    def login(self, username="", pwd="") -> None:
+        login_res: dict = {}
         while True:
-            captcha_data = self.get_captcha()
+            captcha_data = get_captcha()
             captcha_id = captcha_data["id"]  # 验证码ID
             ocr = ddddocr.DdddOcr()
             captcha_code = ocr.classification(base64.b64decode((captcha_data["image"])))
-            print(f"captcha_code: {captcha_code}")
+            pprint(f"captcha_code: {captcha_code}")
 
             login_data = {
                 "login_name": username,
@@ -59,7 +61,7 @@ class ZJOOC:
                     "https://centro.zjlll.net/login/doLogin", data=login_data
                 ).json()
             except Exception as ex:
-                print(ex)
+                pprint(ex)
                 break
 
             if login_res.get("resultCode", 1) == 0:
@@ -308,12 +310,26 @@ class ZJOOC:
                 data=answer_data,
                 headers=Headers,
             ).json()["data"]["paperSubjectList"]
-        except BaseException as ex:
+            pprint(res_answer_data)
+        except Exception as ex:
             return {"err": str(ex)}
         return {an_data["id"]: an_data["rightAnswer"] for an_data in res_answer_data}
 
     def do_an(self, paper_id, course_id, class_id):
-        """ """
+        """
+        _summary_
+
+        _extended_summary_
+
+        Parameters
+        ----------
+        paper_id : _type_
+            _description_
+        course_id : _type_
+            _description_
+        class_id : _type_
+            _description_
+        """
         if not all([paper_id, course_id, class_id]):
             return
 
@@ -360,13 +376,10 @@ class ZJOOC:
         ).content.decode("utf-8")
 
     def do_ans(self):
-        """ "
-        # FIXME
-        直接完成全部 测验 考试 作业
-        如果包含简答题 谨慎使用！！！
-        如果包含简答题 谨慎使用！！！
-        如果包含简答题 谨慎使用！！！
         """
+        # FIX 谨慎使用！！！
+        """
+
         idx = 0
         paper_cnt = sum([len(i) for i in [self.exammsg, self.hwmsg, self.quizemsg]])
         for msg in [self.exammsg, self.hwmsg, self.quizemsg]:
@@ -383,3 +396,67 @@ class ZJOOC:
                         f"[{idx/ paper_cnt:.0%}]",
                         end="",
                     )
+
+    def paser(self, commonds: str):
+        commond_sets = tuple(commonds.split())
+
+        def error_msg():
+            print("paser err!!!")
+            print("please enter your commands again!")
+
+        try:
+            match commond_sets[0]:
+                case "msg":
+                    """
+                    0-测验 1-考试 2-作业
+                    3-info 4-course 5-score
+                    6-video 7-an
+                    ex:
+                        msg 0
+                        msg 6 course_id
+                        msg 7 paperId course_id
+                    """
+                    if int(commond_sets[1]) < 3:
+                        pprint(self._get_msg(commond_sets[1]))
+                        return
+                    match commond_sets[1]:
+                        case "3":
+                            pprint(self.infomsg)
+                        case "4":
+                            pprint(self.coursemsg)
+                        case "5":
+                            pprint(self.scoremsg)
+                        case "6":
+                            if len(commond_sets) < 3:
+                                error_msg()
+                            else:
+                                pprint(self.get_video_msg(commond_sets[2]))
+                        case "7":
+                            self.get_an(commond_sets[2], commond_sets[3])
+                case "do":
+                    """
+                    0-测验、考试、作业 1-video 2-all[not suggest!!!]
+                    ex：
+                        do 0 paper_id course_id class_id
+                        do 1 course_id
+                        do 2 #FIX 谨慎使用！！！
+                    """
+                    match commond_sets[1]:
+                        case "0":
+                            self.do_an(
+                                paper_id=commond_sets[2],
+                                course_id=commond_sets[3],
+                                class_id=commond_sets[4],
+                            )
+                        case "1":
+                            self.do_video(commond_sets[2])
+                        case "2":
+                            self.do_ans()
+
+                case _:
+                    error_msg()
+                    return
+        except Exception as ex:
+            error_msg()
+            print(ex)
+            return

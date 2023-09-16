@@ -12,20 +12,32 @@ from zjooc import ZJOOC
 
 if __name__ == '__main__':
 	# 输入在浙学的账号密码
-    user = ZJOOC(username='', 
-                pwd='')
+    user = ZJOOC(username='', pwd='')
 
-    # user.coursemsg # 获取 batchKey 
-    # {'resultCode': 0, 'message': '操作成功'...
-    print(user._get_msg(0))
-    # param mode: 0-测验 1-考试 2-作业
-    print(user.do_video(""))
-    # 填写需要完成的courseid 等级几秒即可
-
-    # user.do_ans()
-    # # 此命令会自动获取 测验 考试 作业的信息 并且自动完成
-    # # 如果有主观题 谨慎使用 -> do_an
-    # user.do_an(paper_id='', course_id='', class_id='')
-    # # 手动获取 测验 考试 作业的信息 客观题试卷可以直接用此方法完成
+    while True:
+        commands = input("Enter your commands.\n")
+        if commands == "exit":
+            break
+        elif commands == "help":
+            print(
+                """
+                msg:
+                0-测验 1-考试 2-作业
+                3-info 4-course 5-score
+                6-video 7-ans
+                ex: 
+                    msg 0
+                    msg 6 course_id
+                    msg 7 paperId course_id
+                do:
+                0-测验、考试、作业 1-video 2-all[not suggest!!!]
+                ex：
+                    do 0 paper_id course_id class_id
+                    do 1 course_id
+                    do 2 #FIX 谨慎使用！！！
+                """.strip()
+            )
+        else:
+            user.paser(commands)
 ```
 

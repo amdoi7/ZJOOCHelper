@@ -1,0 +1,2 @@
+ddddocr==1.0.6
+requests==2.28.2
