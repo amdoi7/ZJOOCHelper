@@ -153,17 +153,22 @@ class ZJOOC:
                 params=params,
                 headers=Headers,
             ).json()["data"]
-            for i in range(len(res_msg_data)):
-                msg_dict = {
-                    "id": i,
-                    "courseName": res_msg_data[i]["courseName"],
-                    "paperName": res_msg_data[i]["paperName"],
-                    "classId": res_msg_data[i]["classId"],
-                    "courseId": res_msg_data[i]["courseId"],
-                    "paperId": res_msg_data[i]["paperId"],
-                    "scorePropor": res_msg_data[i]["scorePropor"],
-                }
-                msg_lst.append(msg_dict)
+
+            msg_lst.extend(
+                [
+                    {
+                        "id": idx,
+                        "courseName": data["courseName"],
+                        "paperName": data["paperName"],
+                        "classId": data["classId"],
+                        "courseId": data["courseId"],
+                        "paperId": data["paperId"],
+                        "scorePropor": data["scorePropor"],
+                    }
+                    for idx, data in enumerate(res_msg_data)
+                ]
+            )
+
         if not msg_lst:
             print("🤣🤣🤣  Congrats!! all work you have done!!!")
         return msg_lst
@@ -193,23 +198,25 @@ class ZJOOC:
             },
             "checkTimeout": "true",
         }
+
         res_score_data = self.session.get(
             "https://www.zjooc.cn/ajax?",
             params=params,
             headers=Headers,
         ).json()["data"]
-        for i in res_score_data:
-            score_dict = {
-                "courseId": i["courseId"],
-                "courseName": i["courseName"],
-                "finalScore": i["finalScore"],
-                "videoScore": i["videoScore"],
-                "onlineScore": i["onlineScore"],
-                "offlineScore": i["offlineScore"],
-                "testScore": i["testScore"],
-                "homeworkScore": i["homeworkScore"],
+        score_lst = [
+            {
+                "courseId": data["courseId"],
+                "courseName": data["courseName"],
+                "finalScore": data["finalScore"],
+                "videoScore": data["videoScore"],
+                "onlineScore": data["onlineScore"],
+                "offlineScore": data["offlineScore"],
+                "testScore": data["testScore"],
+                "homeworkScore": data["homeworkScore"],
             }
-            score_lst.append(score_dict)
+            for data in res_score_data
+        ]
 
         return score_lst
 
@@ -226,23 +233,19 @@ class ZJOOC:
             headers=Headers,
         ).json()["data"]
 
-        for child0 in video_data:
+        for chapter in video_data:
             # class_name = video_data['name']
-            for child1 in child0["children"]:
+            for section in chapter["children"]:
                 # class_name1 = child1['name']
-                for child2 in child1["children"]:
+                for resource in section["children"]:
                     # resourceType -> 1和2是视频或者字幕
                     # learnStatus  -> 0:表示尚未学习 2:表示已学习 1:可能处于学与未学的薛定谔状态
-                    if child2["learnStatus"] == 0:
+                    if resource["learnStatus"] == 0:
                         video_dict = {
-                            "Name": child0["name"]
-                            + "-"
-                            + child1["name"]
-                            + "-"
-                            + child2["name"],
+                            "Name": f'{chapter["name"]}-{section["name"]}-{resource["name"]}',
                             "courseId": course_id,
-                            "chapterId": child2["id"],
-                            "time": child2.get("vedioTimeLength", 0),
+                            "chapterId": resource["id"],
+                            "time": resource.get("vedioTimeLength", 0),
                             # 'learnStatus':videoMsgData2[n]['learnStatus']
                         }
 
@@ -251,21 +254,27 @@ class ZJOOC:
 
     def do_video(self, course_id):
         """
-        秒过章节内容。
+        This function performs a video operation for a given course ID.
+
+        Parameters:
+            course_id (int): The ID of the course for which the video operation is performed.
+
+        Returns:
+            None
         """
         # 手动填入要做的video 的 courseid
         if not course_id:
             return
+
         video_lst = self.get_video_msg(course_id=course_id)
         video_cnt = len(video_lst)
-        idx = 0
-        for i in video_lst:
-            idx += 1
-            if i["time"]:
+
+        for idx, video in enumerate(video_lst, start=1):
+            if video["time"]:
                 params = {
-                    "params[chapterId]": i["chapterId"],
-                    "params[courseId]": i["courseId"],
-                    "params[playTime]": str(i["time"]),
+                    "params[chapterId]": video["chapterId"],
+                    "params[courseId]": video["courseId"],
+                    "params[playTime]": str(video["time"]),
                     "params[percent]": "100",
                 }
 
@@ -276,8 +285,8 @@ class ZJOOC:
                 ).json()
             else:
                 params = {
-                    "params[courseId]=": i["courseId"],
-                    "params[chapterId]=": i["chapterId"],
+                    "params[courseId]=": video["courseId"],
+                    "params[chapterId]=": video["chapterId"],
                 }
                 self.session.get(
                     "https://www.zjooc.cn/ajax?service=/learningmonitor/api/learning/monitor/finishTextChapter",
@@ -295,8 +304,20 @@ class ZJOOC:
         print("all done!")
 
     def get_an(self, paperId, course_id) -> dict:
+        """
+        Retrieves the answer data for a given paper ID and course ID.
+
+        Args:
+            paperId (int): The ID of the paper.
+            course_id (int): The ID of the course.
+
+        Returns:
+            dict: A dictionary containing the answer data, where the keys are the IDs of the answer data
+                and the values are the corresponding right answers.
+        """
         if not all([paperId, course_id]):
             return {}
+
         res_answer_data: list = []
         try:
             answer_data = {
@@ -320,20 +341,6 @@ class ZJOOC:
         return {an_data["id"]: an_data["rightAnswer"] for an_data in res_answer_data}
 
     def do_an(self, paper_id, course_id, class_id):
-        """
-        _summary_
-
-        _extended_summary_
-
-        Parameters
-        ----------
-        paper_id : _type_
-            _description_
-        course_id : _type_
-            _description_
-        class_id : _type_
-            _description_
-        """
         if not all([paper_id, course_id, class_id]):
             return
 
@@ -361,17 +368,14 @@ class ZJOOC:
             "params[clazzId]": paper_data["paperSubjectList"],
             "params[scoreId]": paper_data["scoreId"],
         }
-        for i in range(len(paper_data["paperSubjectList"])):
+        for idx, subject in enumerrate(paper_data["paperSubjectList"]):
+            subject_id = subject["id"]
+            subject_type = subject["subjectType"]
+            subject_answer = paper_an_data[subject_id]
             qa_dict = {
-                f"params[paperSubjectList][{i}][id]": paper_data["paperSubjectList"][i][
-                    "id"
-                ],
-                f"params[paperSubjectList][{i}][subjectType]": paper_data[
-                    "paperSubjectList"
-                ][i]["subjectType"],
-                f"params[paperSubjectList][{i}][answer]": paper_an_data[
-                    paper_data["paperSubjectList"][i]["id"]
-                ],
+                f"params[paperSubjectList][{i}][id]": subject_id,
+                f"params[paperSubjectList][{i}][subjectType]": subject_type,
+                f"params[paperSubjectList][{i}][answer]": subject_answer,
             }
             send_data.update(qa_dict)
         res = self.session.post(
@@ -400,15 +404,15 @@ class ZJOOC:
                         end="",
                     )
 
-    def paser(self, commonds: str):
-        commond_sets = tuple(commonds.split())
+    def paser(self, commands: str):
+        command_list = commands.split()
 
         def error_msg():
             print("paser err!!!")
             print("please enter your commands again!")
 
         try:
-            match commond_sets[0]:
+            match command_list[0]:
                 case "msg":
                     """
                     0-测验 1-考试 2-作业
@@ -419,10 +423,9 @@ class ZJOOC:
                         msg 6 course_id
                         msg 7 paperId course_id
                     """
-                    if int(commond_sets[1]) < 3:
-                        pprint(self._get_msg(commond_sets[1]))
-                        return
-                    match commond_sets[1]:
+                    match command_list[1]:
+                        case "0" | "1" | "2":
+                            pprint(self._get_msg(command_list[1]))
                         case "3":
                             pprint(self.infomsg)
                         case "4":
@@ -430,12 +433,12 @@ class ZJOOC:
                         case "5":
                             pprint(self.scoremsg)
                         case "6":
-                            if len(commond_sets) < 3:
+                            if len(command_list) < 3:
                                 error_msg()
                             else:
-                                pprint(self.get_video_msg(commond_sets[2]))
+                                pprint(self.get_video_msg(command_list[2]))
                         case "7":
-                            self.get_an(commond_sets[2], commond_sets[3])
+                            self.get_an(command_list[2], command_list[3])
                 case "do":
                     """
                     0-测验、考试、作业 1-video 2-all[not suggest!!!]
@@ -444,15 +447,15 @@ class ZJOOC:
                         do 1 course_id
                         do 2 #FIX 谨慎使用！！！
                     """
-                    match commond_sets[1]:
+                    match command_list[1]:
                         case "0":
                             self.do_an(
-                                paper_id=commond_sets[2],
-                                course_id=commond_sets[3],
-                                class_id=commond_sets[4],
+                                paper_id=command_list[2],
+                                course_id=command_list[3],
+                                class_id=command_list[4],
                             )
                         case "1":
-                            self.do_video(commond_sets[2])
+                            self.do_video(command_list[2])
                         case "2":
                             self.do_ans()
 
