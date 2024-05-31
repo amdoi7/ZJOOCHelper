@@ -1,7 +1,9 @@
 import base64
+from itertools import chain
 from pprint import pprint
 
 import ddddocr
+import html2text
 import requests
 
 Headers = {
@@ -221,7 +223,7 @@ class ZJOOC:
         return score_lst
 
     def get_video_msg(self, course_id) -> list:
-        video_msg = list()
+        video_msg: list
         params = {
             "params[pageNo]": 1,
             "params[courseId]": course_id,
@@ -232,24 +234,19 @@ class ZJOOC:
             params=params,
             headers=Headers,
         ).json()["data"]
+        video_msg = [
+            {
+                "Name": f'{chapter["name"]}-{section["name"]}-{resource["name"]}',
+                "courseId": course_id,
+                "chapterId": resource["id"],
+                "time": resource.get("vedioTimeLength", 0),
+            }
+            for chapter in video_data
+            for section in chapter["children"]
+            for resource in section["children"]
+            if resource["learnStatus"] == 0
+        ]
 
-        for chapter in video_data:
-            # class_name = video_data['name']
-            for section in chapter["children"]:
-                # class_name1 = child1['name']
-                for resource in section["children"]:
-                    # resourceType -> 1和2是视频或者字幕
-                    # learnStatus  -> 0:表示尚未学习 2:表示已学习 1:可能处于学与未学的薛定谔状态
-                    if resource["learnStatus"] == 0:
-                        video_dict = {
-                            "Name": f'{chapter["name"]}-{section["name"]}-{resource["name"]}',
-                            "courseId": course_id,
-                            "chapterId": resource["id"],
-                            "time": resource.get("vedioTimeLength", 0),
-                            # 'learnStatus':videoMsgData2[n]['learnStatus']
-                        }
-
-                        video_msg.append(video_dict)
         return video_msg
 
     def do_video(self, course_id):
@@ -293,12 +290,12 @@ class ZJOOC:
                     params=params,
                     headers=Headers,
                 ).json()
-
+            progress = idx / video_cnt
             print(
                 "\r",
-                i["Name"] + "is doing！" + "\n",
-                "😎" * idx + ".." * (video_cnt - idx),
-                f"[{idx / video_cnt:.0%}]",
+                video["Name"] + "is doing！" + "\r",
+                "😎" * int(progress * 10) + ".." * (10 - int(progress * 10)),
+                f"[{progress:.0%}]",
                 end="",
             )
         print("all done!")
@@ -334,10 +331,19 @@ class ZJOOC:
                 data=answer_data,
                 headers=Headers,
             ).json()["data"]["paperSubjectList"]
-            pprint(res_answer_data)
         except Exception as ex:
             print("err:", ex)
 
+        pprint(
+            {
+                html2text.html2text(an_data["subjectName"]): html2text.html2text(
+                    an_data["subjectOptions"][ord(an_data["rightAnswer"]) - 65][
+                        "optionContent"
+                    ]
+                )
+                for an_data in res_answer_data
+            }
+        )
         return {an_data["id"]: an_data["rightAnswer"] for an_data in res_answer_data}
 
     def do_an(self, paper_id, course_id, class_id):
@@ -348,13 +354,14 @@ class ZJOOC:
         paper_an_data = self.get_an(paper_id, course_id)
         # 申请答题
         answesparams = {
+            "service": "/tkksxt/api/admin/paper/getPaperInfo",
             "params[paperId]": paper_id,
             "params[courseId]": course_id,
             "params[classId]": class_id,
             "params[batchKey]": self._batch_dict[course_id],
         }
         paper_data = self.session.get(
-            "https://www.zjooc.cn/ajax?service=/tkksxt/api/admin/paper/getPaperInfo",
+            "https://www.zjooc.cn/ajax",
             params=answesparams,
             headers=Headers,
         ).json()["data"]
@@ -367,43 +374,43 @@ class ZJOOC:
             "params[stuId]": paper_data["stuId"],
             "params[clazzId]": paper_data["paperSubjectList"],
             "params[scoreId]": paper_data["scoreId"],
+            **{
+                f"params[paperSubjectList][{idx}][id]": subject["id"]
+                for idx, subject in enumerate(paper_data["paperSubjectList"])
+                for k, v in {
+                    "id": subject["id"],
+                    "subjectType": subject["subjectType"],
+                    "answer": paper_an_data[subject["id"]],
+                }.items()
+            },
         }
-        for idx, subject in enumerrate(paper_data["paperSubjectList"]):
-            subject_id = subject["id"]
-            subject_type = subject["subjectType"]
-            subject_answer = paper_an_data[subject_id]
-            qa_dict = {
-                f"params[paperSubjectList][{i}][id]": subject_id,
-                f"params[paperSubjectList][{i}][subjectType]": subject_type,
-                f"params[paperSubjectList][{i}][answer]": subject_answer,
-            }
-            send_data.update(qa_dict)
-        res = self.session.post(
-            "https://www.zjooc.cn/ajax", data=send_data, headers=Headers
-        ).content.decode("utf-8")
+        try:
+            res = self.session.post(
+                "https://www.zjooc.cn/ajax", data=send_data, headers=Headers
+            ).content.decode("utf-8")
+            res.raise_for_status
+        except requests.RequestException:
+            print("Failed to send data!!")
 
+    
+    
     def do_ans(self):
         """
         # FIX 谨慎使用！！！
         """
-
-        idx = 0
-        paper_cnt = sum([len(i) for i in [self.exammsg, self.hwmsg, self.quizemsg]])
-        for msg in [self.exammsg, self.hwmsg, self.quizemsg]:
-            for m in msg:
-                if m["scorePropor"] != "100/100.0":
-                    self.do_an(
-                        paper_id=m["paperId"],
-                        course_id=m["courseId"],
-                        class_id=m["classId"],
-                    )
-                    print(
-                        "\r",
-                        "😎" * (idx := idx + 1) + "--" * (paper_cnt - idx),
-                        f"[{idx/ paper_cnt:.0%}]",
-                        end="",
-                    )
-
+    
+        messages_lst = [self.exammsg, self.hwmsg, self.quizemsg]
+        paper_cnt = sum(len(msg) for msg in messages_lst)
+        for idx, msg in enumerate(chain(*messages_lst)):
+            if msg["scorePropor"] != "100/100.0":
+                self.do_an(
+                    paper_id=msg["paperId"],
+                    course_id=msg["courseId"],
+                    class_id=msg["classId"],
+                )
+                progress = idx / paper_cnt
+                progress_bar = f"{'😎' * int(progress * 10)}{'--' * (10 - int(progress * 10))}[{progress:.0%}]"
+                print("\r", progress_bar, end="")
     def paser(self, commands: str):
         command_list = commands.split()
 
